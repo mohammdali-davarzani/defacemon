@@ -1,0 +1,16 @@
+services:
+  defacemon:
+    build: .
+    container_name: defacemon
+    restart: unless-stopped
+    ports:
+      - "9191:9191"   # control (CLI)
+      - "9192:9192"   # Prometheus /metrics
+    volumes:
+      - defacemon-data:/data
+    environment:
+      DEFACEMON_HEADLESS: "1"
+      PYTHONUNBUFFERED: "1"
+
+volumes:
+  defacemon-data:
