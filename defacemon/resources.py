@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 import requests
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.options import PageLoadStrategy
 
 logger = logging.getLogger(__name__)
 log = logger.info
@@ -46,6 +46,8 @@ def get_resources(main_url):
     """Discover same-domain resources for main_url via browser, return url -> base64 encoded content."""
     options = webdriver.ChromeOptions()
     options.set_capability("goog:loggingPrefs", {"browser": "ALL", "performance": "ALL"})
+    # Return immediately after navigation starts; we sleep below to let JS/resources load.
+    options.page_load_strategy = PageLoadStrategy.none
     if SELENIUM_REMOTE_URL:
         driver = webdriver.Remote(command_executor=SELENIUM_REMOTE_URL, options=options)
     else:
@@ -57,15 +59,16 @@ def get_resources(main_url):
             if os.path.isfile("/usr/bin/chromium"):
                 options.binary_location = "/usr/bin/chromium"
         driver = webdriver.Chrome(options=options)
-    driver.set_page_load_timeout(90)
 
     try:
-        try:
-            driver.get(main_url)
-        except TimeoutException:
-            # Page load timed out but resources may have partially loaded — continue with what we have.
-            logger.warning("Page load timed out for %s, proceeding with partial resource list", main_url)
-        time.sleep(7)  # consider using explicit waits
+        driver.get(main_url)
+        # Poll document.readyState up to 30s, then allow extra time for lazy-loaded resources.
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            if driver.execute_script("return document.readyState") == "complete":
+                break
+            time.sleep(1)
+        time.sleep(5)
 
         resources = driver.execute_cdp_cmd("Page.getResourceTree", {})
         all_urls = _collect_resource_urls(resources)
@@ -82,12 +85,19 @@ def get_resources(main_url):
         driver.quit()
 
 
-def download_and_encode(url):
-    """Fetch URL and return base64-encoded body, or None on error."""
-    try:
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()
-        return base64.b64encode(response.content).decode("utf-8")
-    except Exception as e:
-        logger.error("Failed to download %s: %s", url, e)
-        return None
+def download_and_encode(url, retries=3, retry_delay=3):
+    """Fetch URL and return base64-encoded body, or None if all retries fail."""
+    last_err = None
+    for attempt in range(1, retries + 1):
+        try:
+            response = requests.get(url, timeout=15)
+            response.raise_for_status()
+            return base64.b64encode(response.content).decode("utf-8")
+        except Exception as e:
+            last_err = e
+            if attempt < retries:
+                logger.warning("Download attempt %d/%d failed for %s: %s — retrying in %ds",
+                               attempt, retries, url, e, retry_delay)
+                time.sleep(retry_delay)
+    logger.error("All %d download attempts failed for %s: %s — treating as defaced/removed", retries, url, last_err)
+    return None
