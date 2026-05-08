@@ -3,14 +3,31 @@ services:
     build: .
     container_name: defacemon
     restart: unless-stopped
+    depends_on:
+      selenium:
+        condition: service_healthy
     ports:
       - "9191:9191"   # control (CLI)
       - "9192:9192"   # Prometheus /metrics
     volumes:
       - defacemon-data:/data
     environment:
-      DEFACEMON_HEADLESS: "1"
+      SELENIUM_REMOTE_URL: "http://selenium:4444/wd/hub"
       PYTHONUNBUFFERED: "1"
+
+  selenium:
+    image: selenium/standalone-chrome:latest
+    container_name: defacemon-selenium
+    restart: unless-stopped
+    shm_size: "2gb"
+    ports:
+      - "4444:4444"   # Selenium Grid UI / WebDriver endpoint
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4444/wd/hub/status | grep -q ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
 volumes:
   defacemon-data:

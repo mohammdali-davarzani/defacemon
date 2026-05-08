@@ -29,7 +29,11 @@ def _handle_control_command(core, line):
                 interval = float(parts[2])
             except ValueError:
                 pass
-        domain, err = core.add_domain(url, interval_sec=interval)
+        try:
+            domain, err = core.add_domain(url, interval_sec=interval)
+        except Exception as e:
+            logger.exception("ADD failed for %s", url)
+            return "ERR\t" + str(e)
         if err:
             return "ERR\t" + err
         return "OK\t" + json.dumps({"domain": domain})
@@ -37,7 +41,11 @@ def _handle_control_command(core, line):
         if len(parts) < 2:
             return "ERR\tREFRESH requires domain"
         domain = parts[1].strip()
-        ok, err = core.refresh_domain(domain)
+        try:
+            ok, err = core.refresh_domain(domain)
+        except Exception as e:
+            logger.exception("REFRESH failed for %s", domain)
+            return "ERR\t" + str(e)
         if not ok:
             return "ERR\t" + (err or "failed")
         return "OK\t" + json.dumps({"domain": domain})
@@ -64,7 +72,7 @@ def _control_connection(core, conn):
                 if not data:
                     break
                 buf += data
-                while b"\n" in buf or b"\r" in buf:
+                while b"\n" in buf:
                     line, _, buf = buf.partition(b"\n")
                     line = line.replace(b"\r", b"").decode("utf-8", errors="replace")
                     if not line.strip():

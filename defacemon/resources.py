@@ -8,12 +8,15 @@ from urllib.parse import urlparse
 
 import requests
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
 
 logger = logging.getLogger(__name__)
 log = logger.info
 
-# Set DEFACEMON_HEADLESS=1 in Docker/production to run Chrome headless
+# Set DEFACEMON_HEADLESS=1 to run Chrome headless (local mode only)
 HEADLESS = os.environ.get("DEFACEMON_HEADLESS", "").strip() in ("1", "true", "yes")
+# Set SELENIUM_REMOTE_URL to delegate browser to a remote WebDriver node
+SELENIUM_REMOTE_URL = os.environ.get("SELENIUM_REMOTE_URL", "").strip()
 
 
 def _collect_resource_urls(tree):
@@ -43,18 +46,25 @@ def get_resources(main_url):
     """Discover same-domain resources for main_url via browser, return url -> base64 encoded content."""
     options = webdriver.ChromeOptions()
     options.set_capability("goog:loggingPrefs", {"browser": "ALL", "performance": "ALL"})
-    if HEADLESS:
-        options.add_argument("--headless=new")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        if os.path.isfile("/usr/bin/chromium"):
-            options.binary_location = "/usr/bin/chromium"
-    driver = webdriver.Chrome(options=options)
-    driver.set_page_load_timeout(60)
+    if SELENIUM_REMOTE_URL:
+        driver = webdriver.Remote(command_executor=SELENIUM_REMOTE_URL, options=options)
+    else:
+        if HEADLESS:
+            options.add_argument("--headless=new")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-gpu")
+            if os.path.isfile("/usr/bin/chromium"):
+                options.binary_location = "/usr/bin/chromium"
+        driver = webdriver.Chrome(options=options)
+    driver.set_page_load_timeout(90)
 
     try:
-        driver.get(main_url)
+        try:
+            driver.get(main_url)
+        except TimeoutException:
+            # Page load timed out but resources may have partially loaded — continue with what we have.
+            logger.warning("Page load timed out for %s, proceeding with partial resource list", main_url)
         time.sleep(7)  # consider using explicit waits
 
         resources = driver.execute_cdp_cmd("Page.getResourceTree", {})

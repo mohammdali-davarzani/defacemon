@@ -51,18 +51,24 @@ class MonitorCore:
         if not domain:
             return None, "Invalid URL: no host"
         baseline_path = Path(baseline_path) if baseline_path else baseline.baseline_path_for_domain(domain, self.baseline_dir)
+
         with self._lock:
             if domain in self._domains:
                 return domain, "Domain already monitored"
             bl = baseline.load_baseline(baseline_path)
-            if bl is None or not bl:
-                # Blocking: discover with browser (caller may run in thread)
-                log("ADD: opening URL with browser: %s", main_url)
-                encoded = resources.get_resources(main_url)
-                if not encoded:
-                    return None, "No resources found"
-                baseline.save_baseline(baseline_path, encoded, main_url)
-                bl = {k: v for k, v in encoded.items() if v is not None}
+
+        if bl is None or not bl:
+            # Browser discovery outside the lock — takes 7+ seconds.
+            log("ADD: opening URL with browser: %s", main_url)
+            encoded = resources.get_resources(main_url)
+            if not encoded:
+                return None, "No resources found"
+            baseline.save_baseline(baseline_path, encoded, main_url)
+            bl = {k: v for k, v in encoded.items() if v is not None}
+
+        with self._lock:
+            if domain in self._domains:
+                return domain, "Domain already monitored"
             urls = list(bl.keys())
             stop_event = threading.Event()
             state = {
