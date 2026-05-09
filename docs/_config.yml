@@ -1,0 +1,43 @@
+title: Defacemon
+description: Monitor static website files for defacement — detect added, removed, or modified resources.
+baseurl: "/defacemon"
+url: "https://mohammdali-davarzani.github.io"
+
+remote_theme: just-the-docs/just-the-docs
+
+# Site logo (optional — place a logo.png in docs/assets/)
+# logo: "/assets/logo.png"
+
+color_scheme: light
+
+# Search
+search_enabled: true
+
+# Footer
+footer_content: "Released under a permissive license. Maintained by <a href=\"https://github.com/mohammdali-davarzani\">mohammdali-davarzani</a>."
+
+# Aux links (top-right)
+aux_links:
+  "GitHub":
+    - "https://github.com/mohammdali-davarzani/defacemon"
+
+aux_links_new_tab: true
+
+# Navigation order
+nav_sort: order
+
+# Callouts
+callouts_level: quiet
+callouts:
+  note:
+    title: Note
+    color: blue
+  warning:
+    title: Warning
+    color: yellow
+  tip:
+    title: Tip
+    color: green
+
+plugins:
+  - jekyll-seo-tag
