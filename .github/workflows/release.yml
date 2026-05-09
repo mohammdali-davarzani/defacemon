@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux binary
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pyinstaller requests selenium
+
+      - name: Build
+        run: |
+          pyinstaller \
+            --onefile \
+            --name defacemon-linux-amd64 \
+            --hidden-import selenium.webdriver.chrome.options \
+            --hidden-import selenium.webdriver.remote.webdriver \
+            defacemon.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-binary
+          path: dist/defacemon-linux-amd64
+
+  build-windows:
+    name: Build Windows binary
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pyinstaller requests selenium
+
+      - name: Build
+        run: |
+          pyinstaller `
+            --onefile `
+            --name defacemon-windows-amd64 `
+            --hidden-import selenium.webdriver.chrome.options `
+            --hidden-import selenium.webdriver.remote.webdriver `
+            defacemon.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: dist/defacemon-windows-amd64.exe
+
+  release:
+    name: Publish GitHub Release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-binary
+          path: artifacts/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-binary
+          path: artifacts/
+
+      - name: Make Linux binary executable
+        run: chmod +x artifacts/defacemon-linux-amd64
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/defacemon-linux-amd64
+            artifacts/defacemon-windows-amd64.exe
